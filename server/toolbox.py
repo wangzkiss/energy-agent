@@ -206,12 +206,14 @@ class AgentToolbox:
         row_limit: int = ROW_LIMIT,
         progress: ProgressCallback | None = None,
         schema_cache: Any | None = None,
+        sql_cache: Any | None = None,
     ) -> None:
         self.sources = {source.key: source for source in sources}
         self.today = today
         self.row_limit = row_limit
         self.progress = progress
         self.schema_cache = schema_cache
+        self.sql_cache = sql_cache
         self._schema_tasks: dict[str, asyncio.Task[Any]] = {}
         self._table_cache: dict[str, tuple[float, list[str]]] = {}
         self._describe_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
@@ -370,10 +372,37 @@ class AgentToolbox:
             require_tenant=source.require_tenant,
             forbidden_databases=source.forbidden_databases,
         )
+        cache_key = None
+        if self.sql_cache is not None:
+            cache_key = self.sql_cache.key(
+                source.key, source.database, safe_sql, self.row_limit
+            )
+            hit = self.sql_cache.get(cache_key)
+            if hit is not None:
+                rows, age = hit
+                return ToolOutcome(
+                    tool="run_sql",
+                    ok=True,
+                    summary=(
+                        f"{len(rows)} 行（SQL 缓存命中，{age:.0f}s 前的结果）\n"
+                        + _rows_to_text(rows, limit=20)
+                    ),
+                    facts={
+                        "source": source.key,
+                        "database": source.database,
+                        "sql": safe_sql,
+                        "row_count": len(rows),
+                        "cached": True,
+                        "cache_age_seconds": round(age, 1),
+                    },
+                    rows=rows,
+                )
         rows = await asyncio.wait_for(
             source.provider.ad_hoc_query(safe_sql, limit=self.row_limit),
             timeout=60,
         )
+        if cache_key is not None:
+            self.sql_cache.put(cache_key, rows)
         summary = f"{len(rows)} 行\n" + _rows_to_text(rows, limit=20)
         return ToolOutcome(
             tool="run_sql",
@@ -384,6 +413,7 @@ class AgentToolbox:
                 "database": source.database,
                 "sql": safe_sql,
                 "row_count": len(rows),
+                "cached": False,
             },
             rows=rows,
         )

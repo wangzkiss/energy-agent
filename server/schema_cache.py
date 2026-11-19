@@ -108,6 +108,13 @@ class SchemaCache:
                 self._memory[key] = snapshot
             return snapshot
 
+    def stats(self) -> dict[str, Any]:
+        return {
+            "ttl_seconds": self.ttl_seconds,
+            "memory_entries": len(self._memory),
+            "directory": str(self.directory),
+        }
+
     def peek(self, source: Any) -> SchemaSnapshot | None:
         """只看内存/磁盘快照，不触发构建；用于“有就用、没有就实时查”。"""
         key = f"{source.key}:{source.database}"

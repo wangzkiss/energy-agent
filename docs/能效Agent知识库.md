@@ -1011,9 +1011,11 @@ GROUP BY alarm_level, alarm_status;
 | `cold_station_devices` | 按冷站统计设备分类台数（冷机/水泵/冷却塔/总管） | `server/toolbox.py` |
 | 调查协议 | 术语展开 → 找落点 → 判可用 → 验映射 → 取数 → 交叉校验 → 分层结论，写进 investigator 系统提示 | `server/investigator.py` |
 | schema 快照缓存 | 首次检索实时返回，后台把表清单+字段名/类型/注释落盘（6h TTL）；之后字段检索 0 秒命中 | `server/schema_cache.py` |
+| 启动预热 | BFF 启动后台构建当前租户（可配多租户）的 Doris/MySQL 快照，不阻塞端口就绪 | `server/prewarm.py` |
+| SQL 结果缓存 | `run_sql` 相同库/相同 SQL/相同 limit 在 120s 内复用（LRU 200 条，≤500 行） | `server/sql_cache.py` |
 | 自适应步数 | 常规问题 8 步收口；只有用过 search_columns/table_profile 的发现类才允许到 12 步 | `server/investigator.py` |
 | 黄金回归集 | 12 道业务问题（SCOP/室温/告警/租户/口径），输出 PASS/FAIL 与耗时 | `logs/golden_questions.py` |
-| 单测 | `test_columns.py` / `test_profile.py` / `test_scop.py` / `test_schema_cache.py` 覆盖新工具 | `server/` |
+| 单测 | `test_columns.py` / `test_profile.py` / `test_scop.py` / `test_schema_cache.py` / `test_sql_cache.py` / `test_prewarm.py` 覆盖新工具与缓存 | `server/` |
 
 能力覆盖（2026-11-19，亨通库为实测样本）：
 
@@ -1026,11 +1028,17 @@ GROUP BY alarm_level, alarm_status;
 | 单次步数 | 8 | 自适应 8~12（发现类 12） |
 | 冷站 SCOP | 无 | cold_station_scop（含数据质量状态） |
 | 元数据检索 | 每次实时查 information_schema | schema 快照（6h TTL），冷启动后台构建，命中 0s |
-| 回归集 | 无 | 12 题黄金问题（2026-11-19 实测 12/12，平均 17.8s）+ 71 个单测 |
+| 启动预热 | 无 | 启动后台预热当前租户（187+219 表，约 22s），不阻塞端口 |
+| SQL 结果缓存 | 每次执行都走 Archery | 120s TTL，重复 SQL 1.41s → 0.00s |
+| 回归集 | 无 | 12 题黄金问题（2026-11-19 实测 12/12，平均 17.8s）+ 78 个单测 |
 
 快照命中实测（亨通，2026-11-19）：首次 `search_columns` 2.2s（实时查 + 后台建
 229KB/233KB 快照），第二次 0.0s；快照覆盖 Doris 187 张、MySQL 210 张表。快照过期后
 第一次检索会回退实时查询，并在后台重建，不阻塞当前回答。
+
+启动预热实测（南网，2026-11-19）：BFF 启动 22s 内完成后台预热，Doris 187 张、
+MySQL 219 张；端口在预热期间已可访问。SQL 缓存实测（亨通）：同一 SQL 首次 1.41s、
+第二次 0.00s（`cached=true`）。
 
 使用约束：`search_columns` 只返回元数据（表名/字段名/类型/注释），不返回数据；
 返回 0 行只说明字段名/注释没有命中，不能推断“没有这张表/没有这个指标”。

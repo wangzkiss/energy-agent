@@ -11,13 +11,16 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
+import prewarm
 from agent import EnergyAgent, detect_intent
+from caches import SCHEMA_CACHE, SQL_CACHE
 from config import settings
 from knowledge import knowledge_payload
 from llm import LLMClient, LLMError
@@ -36,7 +39,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("energy-bff")
 
-app = FastAPI(title="能效 Agent BFF", version="0.1.0")
+provider = get_provider()
+llm = LLMClient()
+agent = EnergyAgent(provider, llm)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    task = None
+    if settings.schema_prewarm:
+        # 后台预热，不阻塞端口就绪；失败只写日志。
+        task = asyncio.create_task(prewarm.prewarm_schemas())
+    try:
+        yield
+    finally:
+        if task is not None and not task.done():
+            task.cancel()
+
+
+app = FastAPI(title="能效 Agent BFF", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -44,10 +65,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-provider = get_provider()
-llm = LLMClient()
-agent = EnergyAgent(provider, llm)
 
 
 def _apply_model_config(config: dict[str, Any]) -> None:
@@ -215,6 +232,9 @@ async def health() -> dict[str, Any]:
             "read_code",
             "tenants",
         ],
+        "schema_cache": SCHEMA_CACHE.stats(),
+        "schema_prewarm": prewarm.STATUS.as_dict(),
+        "sql_cache": SQL_CACHE.stats(),
     }
 
 

@@ -44,7 +44,7 @@ from sqlguard import (
     forbidden_databases,
     validate_readonly_sql,
 )
-from schema_cache import SchemaCache
+from caches import SCHEMA_CACHE, SQL_CACHE
 from toolbox import AgentToolbox, ProgressCallback
 
 logger = logging.getLogger("energy-investigator")
@@ -54,7 +54,6 @@ MAX_STEPS = 12
 # 才允许继续到 MAX_STEPS，避免“简单问题也跑满 12 步”。
 SOFT_STEPS = 8
 DISCOVERY_TOOLS = {"search_columns", "table_profile"}
-SCHEMA_CACHE = SchemaCache()
 QUERY_TIMEOUT_SECONDS = 60
 OBSERVATION_BUDGET = 16000
 
@@ -245,6 +244,7 @@ class DataInvestigator:
             row_limit=ROW_LIMIT,
             progress=progress,
             schema_cache=SCHEMA_CACHE,
+            sql_cache=SQL_CACHE,
         )
         system = self._system_prompt(sources, default_key, toolbox)
         observations: list[dict[str, Any]] = []

@@ -221,6 +221,12 @@ class ToolboxTest(unittest.TestCase):
 
 
 class ToolLoopTest(unittest.TestCase):
+    def setUp(self) -> None:
+        # 调查循环共用进程级 SQL 缓存；每个用例从空缓存开始，避免互相命中。
+        from caches import SQL_CACHE
+
+        SQL_CACHE.clear()
+
     def test_metric_then_final(self) -> None:
         llm = FakeLLM(
             [

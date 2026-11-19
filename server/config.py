@@ -86,6 +86,29 @@ class Settings:
         default_factory=lambda: _env_int("AGENT_MAX_STEPS", 12)
     )
 
+    # 库表结构快照：启动时后台预热当前租户，减少第一次字段检索的等待。
+    schema_cache_ttl_seconds: int = field(
+        default_factory=lambda: _env_int("SCHEMA_CACHE_TTL_SECONDS", 6 * 3600)
+    )
+    schema_prewarm: bool = field(
+        default_factory=lambda: _env_bool("SCHEMA_PREWARM", True)
+    )
+    # 逗号分隔的租户 ID；为空时只预热当前租户（DORIS_TENANT_ID）。
+    schema_prewarm_tenants: str = field(
+        default_factory=lambda: _env("SCHEMA_PREWARM_TENANTS", "")
+    )
+
+    # 只读 SQL 结果短期缓存：同一 SQL 在 TTL 内复用，减少 Archery 往返。
+    sql_cache_enabled: bool = field(
+        default_factory=lambda: _env_bool("SQL_CACHE_ENABLED", True)
+    )
+    sql_cache_ttl_seconds: int = field(
+        default_factory=lambda: _env_int("SQL_CACHE_TTL_SECONDS", 120)
+    )
+    sql_cache_size: int = field(
+        default_factory=lambda: _env_int("SQL_CACHE_SIZE", 200)
+    )
+
     # 回答逐行输出的目标总时长（秒）。0 表示一次性输出；默认 8 秒，
     # 让长回答像打字一样逐步出现，避免整段刷出后滚动条瞬间到底。
     answer_stream_seconds: float = field(

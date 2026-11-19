@@ -69,6 +69,9 @@ energy-agent/
 │  ├─ toolbox.py        # 工具注册表：metric/run_sql/find_tables/search_columns/
 │  │                    #   table_profile/describe_table/knowledge/read_code/tenants
 │  ├─ schema_cache.py   # 库表结构快照缓存（information_schema，6h TTL，落盘）
+│  ├─ sql_cache.py      # 只读 SQL 结果短期缓存（LRU + TTL）
+│  ├─ caches.py         # 进程级共享缓存实例（schema + SQL）
+│  ├─ prewarm.py        # 启动预热：后台构建当前租户 schema 快照
 │  ├─ sqlguard.py       # 只读 SQL 校验（investigator 与 toolbox 共用）
 │  ├─ test_investigator.py # SQL Guard / 小时表答案单测（不连库）
 │  ├─ test_semantic.py  # 指标语义层单测（不连库）
@@ -83,6 +86,8 @@ energy-agent/
 │  ├─ test_columns.py   # 字段元数据检索单测（不连库）
 │  ├─ test_profile.py   # 表画像/真实库兜底单测（不连库）
 │  ├─ test_schema_cache.py # schema 快照缓存 + 自适应步数单测（不连库）
+│  ├─ test_sql_cache.py # SQL 结果缓存单测（不连库）
+│  ├─ test_prewarm.py   # 启动预热单测（不连库）
 │  ├─ llm.py            # 模型客户端：Anthropic / OpenAI 双协议
 │  ├─ model_config.py   # 设置页模型配置的读写与脱敏
 │  ├─ test_model_config.py # 模型配置单测（不连网）
@@ -104,7 +109,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\Desktop\zuolin\energ
 
 回归：`python logs/golden_questions.py` 跑 12 道黄金问题（SCOP/室温/告警/租户/口径），
 结果写入 `logs/golden-report.txt`（2026-11-19 实测 12/12，平均 17.8s）；单测在 `server/` 下执行：
-`python -m unittest test_schema_cache.py test_scop.py test_columns.py test_profile.py test_concepts.py test_agent_tools.py test_investigator.py test_semantic.py test_model_config.py`（当前 71 个）。
+`python -m unittest test_prewarm.py test_sql_cache.py test_schema_cache.py test_scop.py test_columns.py test_profile.py test_concepts.py test_agent_tools.py test_investigator.py test_semantic.py test_model_config.py`（当前 78 个）。
 
 ## 1. 启动 BFF
 
@@ -304,6 +309,15 @@ MYSQL_DB=nwdy
 `information_schema` 返回结果，同时在后台把该库的“表清单 + 字段名/类型/注释”抓成
 快照（`server/.cache/schema/<source>-<database>.json`，6 小时 TTL）。之后的字段检索
 0 秒命中；`refresh:true` 可强制重建。快照只是索引，不缓存业务数据。
+
+**启动预热**：BFF 启动时用后台任务预热当前租户（或 `SCHEMA_PREWARM_TENANTS` 指定租户）
+的 Doris + MySQL 快照，不阻塞端口就绪；实测南网双库 187+219 张表约 22 秒完成，之后第一次
+字段检索直接命中。`/health` 的 `schema_prewarm` 可看状态和耗时。
+
+**SQL 结果短期缓存**：`run_sql` 在 120 秒内复用相同库/相同 SQL/相同 limit 的结果
+（LRU，最多 200 条，只缓存成功且 ≤500 行的查询）。实测同一条 SQL 首次 1.41s、第二次
+0.00s；命中时工具结果会标注“SQL 缓存命中，N 秒前的结果”，`/health` 的 `sql_cache`
+可看命中率。
 
 **自适应步数**：常规问题最多 8 步就必须收口；只有用过 `search_columns`/`table_profile`
 的发现类问题才允许继续到 12 步，避免简单问题跑满预算。
