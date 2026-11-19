@@ -16,6 +16,11 @@
     color: var(--dsw-alias-brand-primary-invert);
   }
 
+  /* 菜单打开后鼠标已经移到浮层上，行不再 hover，按钮仍需可见：它是浮层的定位基准 */
+  &.menuOpen .action {
+    display: flex;
+  }
+
   @media (hover: hover) {
     &:not(.active):hover {
       background-color: var(--dsw-specific-sidebar-nav-item-hover);

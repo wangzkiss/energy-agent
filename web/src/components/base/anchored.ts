@@ -129,6 +129,14 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
       return
     }
     const rect = anchor.getBoundingClientRect()
+    /*
+     * 触发元素失去盒子时（例如 hover 才显示的按钮被 display: none 隐藏、祖先被隐藏），
+     * getBoundingClientRect 返回全 0 矩形。照常计算会把浮层摆到视口左上角，鼠标一移进去
+     * 就跳走；这里保留上一次的位置，等触发元素重新出现再跟随。
+     */
+    if (rect.width === 0 && rect.height === 0) {
+      return
+    }
     const spaceAbove = rect.top - offset - VIEWPORT_PADDING
     const spaceBelow = window.innerHeight - rect.bottom - offset - VIEWPORT_PADDING
 
