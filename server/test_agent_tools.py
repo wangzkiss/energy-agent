@@ -263,6 +263,15 @@ class ToolLoopTest(unittest.TestCase):
         assert result is not None
         self.assertIn("查到 1 块表", result.answer)
         self.assertTrue(any("SELECT meter_id" in sql for sql in provider.calls))
+        import json
+        import re
+
+        match = re.search(r"```query-log\n(.+?)\n```", result.answer, re.S)
+        self.assertIsNotNone(match)
+        payload = json.loads(match.group(1))
+        self.assertEqual(payload["records"][0]["tool"], "run_sql")
+        self.assertIn("SELECT meter_id", payload["records"][0]["sql"])
+        self.assertTrue(payload["records"][0]["ok"])
 
     def test_bad_json_falls_back_without_crashing(self) -> None:
         llm = FakeLLM(["不是 JSON", "仍然不是 JSON", "还是不是 JSON"])

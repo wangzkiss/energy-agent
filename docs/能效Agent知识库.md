@@ -186,6 +186,8 @@ SQL Guard 的硬规则（`validate_readonly_sql`）：
   MySQL `alarm_time/create_time/reading_time/exec_time/created_at`；
 - 没有 `LIMIT` 时自动追加 `LIMIT 200`，显式 LIMIT 大于 200 会被拒绝；
 - 单次工具 60 秒超时；工具调用和 SQL 会展示在答案末尾的“查询记录”中，便于复核。
+  前端把查询记录渲染成卡片（工具/数据源/行数/缓存/失败原因），SQL 可展开，每条记录可
+  一键复制完整 SQL。
 
 注意：Archery 当前对 `DESC` 支持不稳定，实际表结构探查用
 `SHOW FULL COLUMNS FROM db.table`；SHOW 语句不要加 `LIMIT`。

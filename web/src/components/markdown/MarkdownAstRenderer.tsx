@@ -12,6 +12,7 @@ import { CitationLink } from '../search/CitationLink.js'
 import { CodeBlock } from './CodeBlock.js'
 import { ImageAsLink, Link } from './Link.js'
 import { InlineMath, MathBlock } from './MathFormula.js'
+import { QueryLog } from './QueryLog.js'
 
 const Html = memo(function Html({ value }: { value: string }) {
   if (/^<br\s*\/?>$/i.test(value)) {
@@ -192,6 +193,9 @@ const MarkdownBlockContentOrDefinitionContent = memo(
             </p>
           )
         case 'code':
+          if (node.lang === 'query-log') {
+            return <QueryLog key={index} payload={node.value} loading={loading} />
+          }
           return (
             <CodeBlock
               key={index}

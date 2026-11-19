@@ -704,14 +704,16 @@ SQL 规则（会被程序强制校验，违反会直接失败）：
         if len(answer) > 8000:
             answer = answer[:8000].rstrip() + "…"
 
-        record_lines: list[str] = []
-        for index, item in enumerate(observations, 1):
+        records: list[dict[str, Any]] = []
+        for item in observations:
             if item.get("tool") in {"protocol", "seed"}:
                 continue
             tool = item.get("tool") or "?"
             args = item.get("args") or {}
+            facts = item.get("facts") or {}
+            raw_sql = str(facts.get("sql") or args.get("sql") or "").strip()
             detail = (
-                args.get("sql")
+                raw_sql
                 or args.get("metric")
                 or args.get("table")
                 or args.get("query")
@@ -719,18 +721,28 @@ SQL 规则（会被程序强制校验，违反会直接失败）：
                 or ""
             )
             detail = " ".join(str(detail).split())
-            if len(detail) > 260:
-                detail = detail[:260] + "…"
-            source = args.get("source") or ""
-            prefix = f"[{tool}/{source}] " if source else f"[{tool}] "
-            if item.get("ok") is False:
-                record_lines.append(
-                    f"- {index}. {prefix}{detail} → 失败：{item.get('error')}"
-                )
-            else:
-                record_lines.append(f"- {index}. {prefix}{detail}")
-        if not record_lines:
-            record_lines.append("- 未调用工具（模型直接给出边界说明）。")
+            records.append(
+                {
+                    "n": len(records) + 1,
+                    "tool": tool,
+                    "source": args.get("source") or facts.get("source") or "",
+                    "database": facts.get("database") or "",
+                    "ok": item.get("ok") is not False,
+                    "error": str(item.get("error") or ""),
+                    # detail 给非 SQL 工具展示；sql 保留完整语句，供前端逐条复制。
+                    "detail": detail[:8000],
+                    "sql": raw_sql[:8000],
+                    "rows": facts.get("row_count"),
+                    "cached": facts.get("cached") if isinstance(facts.get("cached"), bool) else None,
+                }
+            )
+        if records:
+            payload = json.dumps(
+                {"records": records}, ensure_ascii=False, separators=(",", ":")
+            )
+            record_block = "\n\n```query-log\n" + payload + "\n```"
+        else:
+            record_block = "\n\n- 未调用工具（模型直接给出边界说明）。"
 
         source_summary = "；".join(
             f"{source.key}={source.database}（tenant_id={source.tenant_id}）"
@@ -738,7 +750,7 @@ SQL 规则（会被程序强制校验，违反会直接失败）：
         )
         answer += (
             "\n\n### 查询记录\n\n"
-            + "\n".join(record_lines)
+            + record_block
             + "\n\n### 限制\n\n"
             + "- 调查由模型自行选择工具，所有 SQL 都经过只读、单语句、租户/库隔离、"
             "事实表时间过滤和限行校验；复杂口径仍需人工复核。\n"
