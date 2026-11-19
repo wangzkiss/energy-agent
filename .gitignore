@@ -1,0 +1,14 @@
+web/node_modules/
+web/dist/
+server/.env
+server/model_config.json
+server/__pycache__/
+server/.cache/
+server/*.pyc
+__pycache__/
+*.pyc
+*.log
+logs/
+.backup-*/
+.venv/
+.DS_Store
